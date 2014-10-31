@@ -147,28 +147,53 @@ local hwtype = wdev:get("type")
 -- NanoFoo
 local nsantenna = wdev:get("antenna")
 
--- Check whether there is a client interface on the same radio,
--- if yes, lock the channel choice as the station will dicatate the freq
-local has_sta = nil
+-- Check whether there are client interfaces on the same radio,
+-- if yes, lock the channel choice as these stations will dicatate the freq
+local found_sta = nil
 local _, net
-for _, net in ipairs(wdev:get_wifinets()) do
-	if net:mode() == "sta" and net:id() ~= wnet:id() then
-		has_sta = net
-		break
+if wnet:mode() ~= "sta" then
+	for _, net in ipairs(wdev:get_wifinets()) do
+		if net:mode() == "sta" then
+			if not found_sta then
+				found_sta = {}
+				found_sta.channel = net:channel()
+				found_sta.names = {}
+			end
+			found_sta.names[#found_sta.names+1] = net:shortname()
+		end
 	end
 end
 
-if has_sta then
+if found_sta then
 	ch = s:taboption("general", DummyValue, "choice", translate("Channel"))
-	ch.value = translatef("Locked to channel %d used by %s",
-		has_sta:channel(), has_sta:shortname())
+	ch.value = translatef("Locked to channel %d used by: %s",
+		found_sta.channel, table.concat(found_sta.names, ", "))
 else
-	ch = s:taboption("general", Value, "channel", translate("Channel"))
-	ch:value("auto", translate("auto"))
-	for _, f in ipairs(iw and iw.freqlist or { }) do
-		if not f.restricted then
-			ch:value(f.channel, "%i (%.3f GHz)" %{ f.channel, f.mhz / 1000 })
-		end
+	ch = s:taboption("general", Value, "_mode_freq", '<br />'..translate("Operating frequency"))
+	ch.hwmodes = iw.hwmodelist
+	ch.freqlist = iw.freqlist
+	ch.template = "cbi/wireless_modefreq"
+
+	function ch.cfgvalue(self, section)
+		return {
+			m:get(section, "hwmode") or "",
+			m:get(section, "channel") or "auto",
+			m:get(section, "htmode") or ""
+		}
+	end
+
+	function ch.formvalue(self, section)
+		return {
+			m:formvalue(self:cbid(section) .. ".band") or (iw.hwmodelist.g and "11g" or "11a"),
+			m:formvalue(self:cbid(section) .. ".channel") or "auto",
+			m:formvalue(self:cbid(section) .. ".htmode") or ""
+		}
+	end
+
+	function ch.write(self, section, value)
+		m:set(section, "hwmode", value[1])
+		m:set(section, "channel", value[2])
+		m:set(section, "htmode", value[3])
 	end
 end
 
@@ -188,45 +213,6 @@ if hwtype == "mac80211" then
 			tp:value(p.driver_dbm, "%i dBm (%i mW)"
 				%{ p.display_dbm, p.display_mw })
 		end
-	end
-
-	mode = s:taboption("advanced", ListValue, "hwmode", translate("Band"))
-
-	if hw_modes.ac then
-		if hw_modes.ac then mode:value("11a", "5GHz (802.11n+ac)") end
-
-		htmode = s:taboption("advanced", ListValue, "htmode", translate("VHT mode (802.11ac)"))
-		htmode:value("", translate("disabled"))
-		htmode:value("VHT20", "20MHz")
-		htmode:value("VHT40", "40MHz")
-		htmode:value("VHT80", "80MHz")
-
-	elseif hw_modes.n then
-		if hw_modes.g then mode:value("11g", "2.4GHz (802.11g+n)") end
-		if hw_modes.a then mode:value("11a", "5GHz (802.11a+n)") end
-
-		htmode = s:taboption("advanced", ListValue, "htmode", translate("HT mode (802.11n)"))
-		htmode:value("", translate("disabled"))
-		htmode:value("HT20", "20MHz")
-		htmode:value("HT40", "40MHz")
-
-		function mode.cfgvalue(...)
-			local v = Value.cfgvalue(...)
-			if v == "11na" then
-				return "11a"
-			elseif v == "11ng" then
-				return "11g"
-			end
-			return v
-		end
-
-		noscan = s:taboption("advanced", Flag, "noscan", translate("Force 40MHz mode"),
-			translate("Always use 40MHz channels even if the secondary channel overlaps. Using this option does not comply with IEEE 802.11n-2009!"))
-		noscan:depends("htmode", "HT40")
-		noscan.default = noscan.disabled
-	else
-		if hw_modes.g then mode:value("11g", "2.4GHz (802.11g)") end
-		if hw_modes.a then mode:value("11a", "5GHz (802.11a)") end
 	end
 
 	local cl = iw and iw.countrylist
@@ -278,16 +264,6 @@ if hwtype == "atheros" then
 		tp:value(p.driver_dbm, "%i dBm (%i mW)"
 			%{ p.display_dbm, p.display_mw })
 	end
-
-	mode = s:taboption("advanced", ListValue, "hwmode", translate("Mode"))
-	mode:value("", translate("auto"))
-	if hw_modes.b then mode:value("11b", "802.11b") end
-	if hw_modes.g then mode:value("11g", "802.11g") end
-	if hw_modes.a then mode:value("11a", "802.11a") end
-	if hw_modes.g then mode:value("11bg", "802.11b+g") end
-	if hw_modes.g then mode:value("11gst", "802.11g + Turbo") end
-	if hw_modes.a then mode:value("11ast", "802.11a + Turbo") end
-	mode:value("fh", translate("Frequency Hopping"))
 
 	s:taboption("advanced", Flag, "diversity", translate("Diversity")).rmempty = false
 
@@ -345,12 +321,6 @@ if hwtype == "broadcom" then
 		tp:value(p.driver_dbm, "%i dBm (%i mW)"
 			%{ p.display_dbm, p.display_mw })
 	end
-
-	mode = s:taboption("advanced", ListValue, "hwmode", translate("Mode"))
-	mode:value("11bg", "802.11b+g")
-	mode:value("11b", "802.11b")
-	mode:value("11g", "802.11g")
-	mode:value("11gst", "802.11g + Turbo")
 
 	ant1 = s:taboption("advanced", ListValue, "txantenna", translate("Transmitter Antenna"))
 	ant1.widget = "radio"
@@ -967,6 +937,20 @@ if hwtype == "atheros" or hwtype == "mac80211" or hwtype == "prism2" then
 	password:depends({mode="sta-wds", eap_type="peap", encryption="wpa"})
 	password:depends({mode="sta-wds", eap_type="ttls", encryption="wpa2"})
 	password:depends({mode="sta-wds", eap_type="ttls", encryption="wpa"})
+end
+
+if hwtype == "atheros" or hwtype == "mac80211" or hwtype == "prism2" then
+	local wpasupplicant = fs.access("/usr/sbin/wpa_supplicant")
+	local hostcli = fs.access("/usr/sbin/hostapd_cli")
+	if hostcli and wpasupplicant then
+		wps = s:taboption("encryption", Flag, "wps_pushbutton", translate("Enable WPS pushbutton, requires WPA(2)-PSK"))
+		wps.enabled = "1"
+		wps.disabled = "0"
+		wps.rmempty = false
+		wps:depends("encryption", "psk")
+		wps:depends("encryption", "psk2")
+		wps:depends("encryption", "psk-mixed")
+	end
 end
 
 return m
