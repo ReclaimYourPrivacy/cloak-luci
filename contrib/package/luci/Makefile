@@ -288,6 +288,7 @@ endef
 
 $(eval $(call theme,openwrt,OpenWrt.org))
 $(eval $(call theme,bootstrap,Bootstrap Theme (default)))
+$(eval $(call theme,cloak,Cloak Theme))
 
 
 ### Translations ###
