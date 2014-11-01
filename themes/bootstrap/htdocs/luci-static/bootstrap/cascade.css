@@ -1040,19 +1040,11 @@ header .dropdown-menu a.hover,
 .dropdown.open .menu-dropdown,
 .open .dropdown-menu,
 .dropdown.open .dropdown-menu {
-<<<<<<< HEAD
-	display: block;
-}
-
-.dropdown:hover ul.dropdown-menu {
-	display: block;
-=======
 	left: 0;
 }
 
 .dropdown:hover ul.dropdown-menu {
 	left: 0;
->>>>>>> 1b6e4e4304ffa884bf1949b8213c422a3f4fd22c
 }
 
 .dropdown-menu .dropdown-menu {
