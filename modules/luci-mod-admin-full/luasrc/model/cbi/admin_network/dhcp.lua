@@ -1,18 +1,7 @@
---[[
-LuCI - Lua Configuration Interface
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
-Copyright 2008 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
-
-local sys = require "luci.sys"
+local ipc = require "luci.ip"
 
 m = Map("dhcp", translate("DHCP and DNS"),
 	translate("Dnsmasq is a combined <abbr title=\"Dynamic Host Configuration Protocol" ..
@@ -243,12 +232,11 @@ ip.datatype = "or(ip4addr,'ignore')"
 
 hostid = s:option(Value, "hostid", translate("<abbr title=\"Internet Protocol Version 6\">IPv6</abbr>-Suffix (hex)"))
 
-sys.net.arptable(function(entry)
-	ip:value(entry["IP address"])
-	mac:value(
-		entry["HW address"],
-		entry["HW address"] .. " (" .. entry["IP address"] .. ")"
-	)
+ipc.neighbors({ family = 4 }, function(n)
+	if n.mac and n.dest then
+		ip:value(n.dest:string())
+		mac:value(n.mac, "%s (%s)" %{ n.mac, n.dest:string() })
+	end
 end)
 
 function ip.validate(self, value, section)

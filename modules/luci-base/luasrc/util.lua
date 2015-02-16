@@ -1,25 +1,5 @@
---[[
-LuCI - Utility library
-
-Description:
-Several common useful Lua functions
-
-License:
-Copyright 2008 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-]]--
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
 local io = require "io"
 local math = require "math"
@@ -30,6 +10,9 @@ local string = require "string"
 local coroutine = require "coroutine"
 local tparser = require "luci.template.parser"
 
+local _ubus = require "ubus"
+local _ubus_connection = nil
+
 local getmetatable, setmetatable = getmetatable, setmetatable
 local rawget, rawset, unpack = rawget, rawset, unpack
 local tostring, type, assert = tostring, type, assert
@@ -37,7 +20,6 @@ local ipairs, pairs, next, loadstring = ipairs, pairs, next, loadstring
 local require, pcall, xpcall = require, pcall, xpcall
 local collectgarbage, get_memory_limit = collectgarbage, get_memory_limit
 
---- LuCI utility functions.
 module "luci.util"
 
 --
@@ -71,7 +53,6 @@ local function _instantiate(class, ...)
 	return inst
 end
 
---- Create a Class object (Python-style object model).
 -- The class object can be instantiated by calling itself.
 -- Any class functions or shared parameters can be attached to this object.
 -- Attaching a table to the class object makes this table shared between
@@ -81,10 +62,6 @@ end
 -- to the __init__ function of this class - if such a function exists.
 -- The __init__ function must be used to set any object parameters that are not shared
 -- with other objects of this class. Any return values will be ignored.
--- @param base	The base class to inherit from (optional)
--- @return		A class object
--- @see			instanceof
--- @see			clone
 function class(base)
 	return setmetatable({}, {
 		__call  = _instantiate,
@@ -92,12 +69,6 @@ function class(base)
 	})
 end
 
---- Test whether the given object is an instance of the given class.
--- @param object	Object instance
--- @param class		Class object to test against
--- @return			Boolean indicating whether the object is an instance
--- @see				class
--- @see				clone
 function instanceof(object, class)
 	local meta = getmetatable(object)
 	while meta and meta.__index do
@@ -134,10 +105,8 @@ local tl_meta = {
 	end
 }
 
---- Create a new or get an already existing thread local store associated with
 -- the current active coroutine. A thread local store is private a table object
 -- whose values can't be accessed from outside of the running coroutine.
--- @return	Table value representing the corresponding thread local store
 function threadlocal(tbl)
 	return setmetatable(tbl or {}, tl_meta)
 end
@@ -147,17 +116,10 @@ end
 -- Debugging routines
 --
 
---- Write given object to stderr.
--- @param obj	Value to write to stderr
--- @return		Boolean indicating whether the write operation was successful
 function perror(obj)
 	return io.stderr:write(tostring(obj) .. "\n")
 end
 
---- Recursively dumps a table to stdout, useful for testing and debugging.
--- @param t	Table value to dump
--- @param maxdepth	Maximum depth
--- @return	Always nil
 function dumptable(t, maxdepth, i, seen)
 	i = i or 0
 	seen = seen or setmetatable({}, {__mode="k"})
@@ -180,31 +142,19 @@ end
 -- String and data manipulation routines
 --
 
---- Create valid XML PCDATA from given string.
--- @param value	String value containing the data to escape
--- @return		String value containing the escaped data
 function pcdata(value)
 	return value and tparser.pcdata(tostring(value))
 end
 
---- Strip HTML tags from given string.
--- @param value	String containing the HTML text
--- @return	String with HTML tags stripped of
 function striptags(value)
 	return value and tparser.striptags(tostring(value))
 end
 
---- Splits given string on a defined separator sequence and return a table
 -- containing the resulting substrings. The optional max parameter specifies
 -- the number of bytes to process, regardless of the actual length of the given
 -- string. The optional last parameter, regex, specifies whether the separator
 -- sequence is interpreted as regular expression.
--- @param str		String value containing the data to split up
--- @param pat		String with separator pattern (optional, defaults to "\n")
--- @param max		Maximum times to split (optional)
--- @param regex 	Boolean indicating whether to interpret the separator
 --					pattern as regular expression (optional, default is false)
--- @return			Table containing the resulting substrings
 function split(str, pat, max, regex)
 	pat = pat or "\n"
 	max = max or #str
@@ -238,29 +188,19 @@ function split(str, pat, max, regex)
 	return t
 end
 
---- Remove leading and trailing whitespace from given string value.
--- @param str	String value containing whitespace padded data
--- @return		String value with leading and trailing space removed
 function trim(str)
 	return (str:gsub("^%s*(.-)%s*$", "%1"))
 end
 
---- Count the occurences of given substring in given string.
--- @param str		String to search in
--- @param pattern	String containing pattern to find
--- @return			Number of found occurences
 function cmatch(str, pat)
 	local count = 0
 	for _ in str:gmatch(pat) do count = count + 1 end
 	return count
 end
 
---- Return a matching iterator for the given value. The iterator will return
 -- one token per invocation, the tokens are separated by whitespace. If the
 -- input value is a table, it is transformed into a string first. A nil value
 -- will result in a valid interator which aborts with the first invocation.
--- @param val		The value to scan (table, string or nil)
--- @return			Iterator which returns one token per call
 function imatch(v)
 	if type(v) == "table" then
 		local k = nil
@@ -285,7 +225,6 @@ function imatch(v)
 	return function() end
 end
 
---- Parse certain units from the given string and return the canonical integer
 -- value or 0 if the unit is unknown. Upper- or lower case is irrelevant.
 -- Recognized units are:
 --	o "y"	- one year   (60*60*24*366)
@@ -300,8 +239,6 @@ end
 --  o "kib" - one si kilobyte (1000)
 --  o "mib"	- one si megabyte (1000*1000)
 --  o "gib"	- one si gigabyte (1000*1000*1000)
--- @param ustr	String containing a numerical value with trailing unit
--- @return		Number containing the canonical value
 function parse_units(ustr)
 
 	local val = 0
@@ -353,10 +290,6 @@ string.cmatch      = cmatch
 string.parse_units = parse_units
 
 
---- Appends numerically indexed tables or single objects to a given table.
--- @param src	Target table
--- @param ...	Objects to insert
--- @return		Target table
 function append(src, ...)
 	for i, a in ipairs({...}) do
 		if type(a) == "table" then
@@ -370,19 +303,10 @@ function append(src, ...)
 	return src
 end
 
---- Combines two or more numerically indexed tables and single objects into one table.
--- @param tbl1	Table value to combine
--- @param tbl2	Table value to combine
--- @param ...	More tables to combine
--- @return		Table value containing all values of given tables
 function combine(...)
 	return append({}, ...)
 end
 
---- Checks whether the given table contains the given value.
--- @param table	Table value
--- @param value	Value to search within the given table
--- @return		Boolean indicating whether the given value occurs within table
 function contains(table, value)
 	for k, v in pairs(table) do
 		if value == v then
@@ -392,20 +316,13 @@ function contains(table, value)
 	return false
 end
 
---- Update values in given table with the values from the second given table.
 -- Both table are - in fact - merged together.
--- @param t			Table which should be updated
--- @param updates	Table containing the values to update
--- @return			Always nil
 function update(t, updates)
 	for k, v in pairs(updates) do
 		t[k] = v
 	end
 end
 
---- Retrieve all keys of given associative table.
--- @param t	Table to extract keys from
--- @return	Sorted table containing the keys
 function keys(t)
 	local keys = { }
 	if t then
@@ -416,10 +333,6 @@ function keys(t)
 	return keys
 end
 
---- Clones the given object and return it's copy.
--- @param object	Table value to clone
--- @param deep		Boolean indicating whether to do recursive cloning
--- @return			Cloned table value
 function clone(object, deep)
 	local copy = {}
 
@@ -434,8 +347,6 @@ function clone(object, deep)
 end
 
 
---- Create a dynamic table which automatically creates subtables.
--- @return	Dynamic Table
 function dtable()
         return setmetatable({}, { __index =
                 function(tbl, key)
@@ -474,12 +385,7 @@ function _serialize_table(t, seen)
 	return idata .. ( #data > 0 and #idata > 0 and ", " or "" ) .. data
 end
 
---- Recursively serialize given data to lua code, suitable for restoring
 -- with loadstring().
--- @param val	Value containing the data to serialize
--- @return		String value containing the serialized code
--- @see			restore_data
--- @see			get_bytecode
 function serialize_data(val, seen)
 	seen = seen or setmetatable({}, {__mode="k"})
 
@@ -500,11 +406,6 @@ function serialize_data(val, seen)
 	end
 end
 
---- Restore data previously serialized with serialize_data().
--- @param str	String containing the data to restore
--- @return		Value containing the restored data structure
--- @see			serialize_data
--- @see			get_bytecode
 function restore_data(str)
 	return loadstring("return " .. str)()
 end
@@ -514,10 +415,7 @@ end
 -- Byte code manipulation routines
 --
 
---- Return the current runtime bytecode of the given data. The byte code
 -- will be stripped before it is returned.
--- @param val	Value to return as bytecode
--- @return		String value containing the bytecode of the given data
 function get_bytecode(val)
 	local code
 
@@ -530,11 +428,8 @@ function get_bytecode(val)
 	return code -- and strip_bytecode(code)
 end
 
---- Strips unnescessary lua bytecode from given string. Information like line
 -- numbers and debugging numbers will be discarded. Original version by
 -- Peter Cawley (http://lua-users.org/lists/lua-l/2008-02/msg01158.html)
--- @param code	String value containing the original lua byte code
--- @return		String value containing the stripped lua byte code
 function strip_bytecode(code)
 	local version, format, endian, int, size, ins, num, lnum = code:byte(5, 12)
 	local subint
@@ -624,27 +519,17 @@ function _sortiter( t, f )
 	end
 end
 
---- Return a key, value iterator which returns the values sorted according to
 -- the provided callback function.
--- @param t	The table to iterate
--- @param f A callback function to decide the order of elements
--- @return	Function value containing the corresponding iterator
 function spairs(t,f)
 	return _sortiter( t, f )
 end
 
---- Return a key, value iterator for the given table.
 -- The table pairs are sorted by key.
--- @param t	The table to iterate
--- @return	Function value containing the corresponding iterator
 function kspairs(t)
 	return _sortiter( t )
 end
 
---- Return a key, value iterator for the given table.
 -- The table pairs are sorted by value.
--- @param t	The table to iterate
--- @return	Function value containing the corresponding iterator
 function vspairs(t)
 	return _sortiter( t, function (a,b) return t[a] < t[b] end )
 end
@@ -654,15 +539,10 @@ end
 -- System utility functions
 --
 
---- Test whether the current system is operating in big endian mode.
--- @return	Boolean value indicating whether system is big endian
 function bigendian()
 	return string.byte(string.dump(function() end), 7) == 0
 end
 
---- Execute given commandline and gather stdout.
--- @param command	String containing command to execute
--- @return			String containing the command's stdout
 function exec(command)
 	local pp   = io.popen(command)
 	local data = pp:read("*a")
@@ -671,9 +551,6 @@ function exec(command)
 	return data
 end
 
---- Return a line-buffered iterator over the output of given command.
--- @param command	String containing the command to execute
--- @return			Iterator
 function execi(command)
 	local pp = io.popen(command)
 
@@ -704,8 +581,78 @@ function execl(command)
 	return data
 end
 
---- Returns the absolute path to LuCI base directory.
--- @return		String containing the directory path
+function ubus(object, method, data)
+	if not _ubus_connection then
+		_ubus_connection = _ubus.connect()
+		assert(_ubus_connection, "Unable to establish ubus connection")
+	end
+
+	if object and method then
+		if type(data) ~= "table" then
+			data = { }
+		end
+		return _ubus_connection:call(object, method, data)
+	elseif object then
+		return _ubus_connection:signatures(object)
+	else
+		return _ubus_connection:objects()
+	end
+end
+
+function serialize_json(x, cb)
+	local rv, push = nil, cb
+	if not push then
+		rv = { }
+		push = function(tok) rv[#rv+1] = tok end
+	end
+
+	if x == nil then
+		push("null")
+	elseif type(x) == "table" then
+		-- test if table is array like
+		local k, v
+		local n1, n2 = 0, 0
+		for k in pairs(x) do n1 = n1 + 1 end
+		for k in ipairs(x) do n2 = n2 + 1 end
+
+		if n1 == n2 and n1 > 0 then
+			push("[")
+			for k = 1, n2 do
+				if k > 1 then
+					push(",")
+				end
+				serialize_json(x[k], push)
+			end
+			push("]")
+		else
+			push("{")
+			for k, v in pairs(x) do
+				push("%q:" % tostring(k))
+				serialize_json(v, push)
+				if next(x, k) then
+					push(",")
+				end
+			end
+			push("}")
+		end
+	elseif type(x) == "number" or type(x) == "boolean" then
+		if (x ~= x) then
+			-- NaN is the only value that doesn't equal to itself.
+			push("Number.NaN")
+		else
+			push(tostring(x))
+		end
+	else
+		push('"%s"' % tostring(x):gsub('["%z\1-\31]',
+			function(c) return '\\u%04x' % c:byte(1) end))
+	end
+
+	if not cb then
+		return table.concat(rv, "")
+	end
+end
+
+
 function libpath()
 	return require "nixio.fs".dirname(ldebug.__file__)
 end
@@ -745,11 +692,6 @@ local function copcall_id(trace, ...)
   return ...
 end
 
---- This is a coroutine-safe drop-in replacement for Lua's "xpcall"-function
--- @param f		Lua function to be called protected
--- @param err	Custom error handler
--- @param ...	Parameters passed to the function
--- @return		A boolean whether the function call succeeded and the return
 --				values of either the function or the error handler
 function coxpcall(f, err, ...)
 	local res, co = oldpcall(coroutine.create, f)
@@ -764,10 +706,6 @@ function coxpcall(f, err, ...)
 	return performResume(err, co, ...)
 end
 
---- This is a coroutine-safe drop-in replacement for Lua's "pcall"-function
--- @param f		Lua function to be called protected
--- @param ...	Parameters passed to the function
--- @return		A boolean whether the function call succeeded and the returns
 --				values of the function or the error object
 function copcall(f, ...)
 	return coxpcall(f, copcall_id, ...)

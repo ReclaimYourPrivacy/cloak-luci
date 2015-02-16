@@ -1,16 +1,5 @@
---[[
-LuCI - Lua Configuration Interface
-
-Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
+-- Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
+-- Licensed to the public under the Apache License 2.0.
 
 local CTRL = require "luci.controller.ddns"	-- this application's controller
 local DISP = require "luci.dispatcher"
@@ -22,7 +11,8 @@ local DDNS = require "luci.tools.ddns"		-- ddns multiused functions
 has_ssl     = DDNS.check_ssl()		-- HTTPS support
 has_proxy   = DDNS.check_proxy()	-- Proxy support
 has_dnstcp  = DDNS.check_bind_host()	-- DNS TCP support
-need_update = CTRL.update_needed()	-- correct ddns-scripts version
+-- correct ddns-scripts version
+need_update = DDNS.ipkg_ver_compare(DDNS.ipkg_ver_installed("ddns-scripts"), "<<", CTRL.DDNS_MIN)
 
 -- html constants
 font_red = [[<font color="red">]]

@@ -1,20 +1,9 @@
---[[
-LuCI - Lua Configuration Interface
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Copyright 2008 Jo-Philipp Wich <jow@openwrt.org>
+-- Licensed to the public under the Apache License 2.0.
 
-Copyright 2008 Steven Barth <steven@midlink.org>
-Copyright 2008 Jo-Philipp Wich <xm@leipzig.freifunk.net>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
-
-require("luci.sys")
-require("luci.ip")
+local sys = require"luci.sys"
+local ip  = require "luci.ip"
 
 m = Map("coovachilli")
 
@@ -27,8 +16,8 @@ s1:option( Value, "tundev" ).optional = true
 s1:option( Value, "txqlen" ).optional = true
 
 net = s1:option( Value, "net" )
-for _, route in ipairs(luci.sys.net.routes()) do
-	if route.device ~= "lo" and route.dest:prefix() < 32 then
+for _, route in ipairs(ip.routes({ family = 4, type = 1 })) do
+	if route.dest:prefix() > 0 and route.dest:prefix() < 32 then
 		net:value( route.dest:string() )
 	end
 end
@@ -52,7 +41,7 @@ s2 = m:section(TypedSection, "dhcp")
 s2.anonymous = true
 
 dif = s2:option( Value, "dhcpif" )
-for _, nif in ipairs(luci.sys.net.devices()) do
+for _, nif in ipairs(sys.net.devices()) do
 	if nif ~= "lo" then dif:value(nif) end
 end
 

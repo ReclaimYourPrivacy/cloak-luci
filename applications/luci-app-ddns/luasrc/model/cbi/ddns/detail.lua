@@ -1,25 +1,8 @@
---[[
-LuCI - Lua Configuration Interface
-
-A lot of code taken from original ddns.lua cbi-model made by
-Copyright 2008 Steven Barth <steven@midlink.org>
-Copyright 2008 Jo-Philipp Wich <xm@leipzig.freifunk.net>
-Copyright 2013 Manuel Munz <freifunk at somakoma dot de>
-
-modified to use as detail page together with new overview page and
-extensions for IPv6, HTTPS settings, syslog and log settings,
-optional Proxy-Support, optional DNS-Server, optional use of TCP requests to DNS server,
-optional force of IP protocol version usage
-Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Copyright 2008 Jo-Philipp Wich <jow@openwrt.org>
+-- Copyright 2013 Manuel Munz <freifunk at somakoma dot de>
+-- Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
+-- Licensed to the public under the Apache License 2.0.
 
 local NX   = require "nixio"
 local FS   = require "nixio.fs"
@@ -39,7 +22,7 @@ has_ipv6   = DDNS.check_ipv6()	-- IPv6 support
 has_ssl    = DDNS.check_ssl()	-- HTTPS support
 has_proxy  = DDNS.check_proxy()	-- Proxy support
 has_dnstcp = DDNS.check_bind_host()	-- DNS TCP support
-has_force  = has_ssl and has_dnstcp		-- Force IP Protocoll
+has_force  = has_ssl and has_dnstcp	-- Force IP Protocoll
 
 -- html constants -- ###########################################################
 font_red = "<font color='red'>"

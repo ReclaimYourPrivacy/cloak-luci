@@ -1,19 +1,8 @@
---[[
-LuCI - Lua Configuration Interface
-
-Copyright 2008 Steven Barth <steven@midlink.org>
-Copyright 2008 Jo-Philipp Wich <xm@leipzig.freifunk.net>
-Copyright 2013 Manuel Munz <freifunk at somakoma dot de>
-Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Copyright 2008 Jo-Philipp Wich <jow@openwrt.org>
+-- Copyright 2013 Manuel Munz <freifunk at somakoma dot de>
+-- Copyright 2014 Christian Schoenebeck <christian dot schoenebeck at gmail dot com>
+-- Licensed to the public under the Apache License 2.0.
 
 module("luci.controller.ddns", package.seeall)
 
@@ -26,19 +15,21 @@ local SYS  = require "luci.sys"
 local DDNS = require "luci.tools.ddns"		-- ddns multiused functions
 local UTIL = require "luci.util"
 
-local luci_ddns_version = "2.1.0-4"	-- luci-app-ddns / openwrt Makefile compatible version
-local ddns_scripts_min  = "2.1.0-3"	-- minimum version of ddns-scripts required
+DDNS_MIN = "2.1.0-2"	-- minimum version of service required
 
 function index()
-	-- no services_ipv6 file or no dynamic_dns_lucihelper.sh
-	-- do NOT start
-	if not nixio.fs.access("/usr/lib/ddns/services_ipv6") 
-	or not nixio.fs.access("/usr/lib/ddns/dynamic_dns_lucihelper.sh") then
+	local nxfs	= require "nixio.fs"		-- global definitions not available
+	local sys	= require "luci.sys"		-- in function index()
+	local ddns	= require "luci.tools.ddns"	-- ddns multiused functions
+	local verinst	= ddns.ipkg_ver_installed("ddns-scripts")
+	local verok	= ddns.ipkg_ver_compare(verinst, ">=", "2.0.0-0")
+	-- do NOT start it not ddns-scripts version 2.x
+	if not verok then
 		return
 	end
 	-- no config create an empty one
-	if not nixio.fs.access("/etc/config/ddns") then
-		nixio.fs.writefile("/etc/config/ddns", "")
+	if not nxfs.access("/etc/config/ddns") then
+		nxfs.writefile("/etc/config/ddns", "")
 	end
 
 	entry( {"admin", "services", "ddns"}, cbi("ddns/overview"), _("Dynamic DNS"), 59)
@@ -55,17 +46,11 @@ local function _get_status()
 	local uci	 = UCI.cursor()
 	local service	 = SYS.init.enabled("ddns") and 1 or 0
 	local url_start	 = DISP.build_url("admin", "system", "startup")
-	local luci_build = DDNS.ipkg_version("luci-app-ddns").version
-	local ddns_act   = DDNS.ipkg_version("ddns-scripts").version
 	local data	 = {}	-- Array to transfer data to javascript
 
 	data[#data+1] 	= {
 		enabled	   = service,		-- service enabled
 		url_up	   = url_start,		-- link to enable DDS (System-Startup)
-		luci_ver   = luci_ddns_version,	-- luci-app-ddns / openwrt Makefile compatible version
-		luci_build = luci_build,	-- installed luci build
-		script_min = ddns_scripts_min,	-- minimum version of ddns-scripts needed
-		script_ver = ddns_act		-- installed ddns-scripts
 	}
 
 	uci:foreach("ddns", "service", function (s)
@@ -74,8 +59,8 @@ local function _get_status()
 		-- and enabled state
 		local section	= s[".name"]
 		local enabled	= tonumber(s["enabled"]) or 0
-		local datelast	= "_empty_"	-- formated date of last update
-		local datenext	= "_empty_"	-- formated date of next update
+		local datelast	= "_empty_"	-- formatted date of last update
+		local datenext	= "_empty_"	-- formatted date of next update
 
 		-- get force seconds
 		local force_seconds = DDNS.calc_seconds(
@@ -193,7 +178,7 @@ function startstop(section, enabled)
 		return
 	end
 
-	-- read uncommited changes
+	-- read uncommitted changes
 	-- we don't save and commit data from other section or other options
 	-- only enabled will be done
 	local exec	  = true
@@ -221,9 +206,9 @@ function startstop(section, enabled)
 	end
 
 	-- we can not execute because other
-	-- uncommited changes pending, so exit here
+	-- uncommitted changes pending, so exit here
 	if not exec then
-		HTTP.write("_uncommited_")
+		HTTP.write("_uncommitted_")
 		return
 	end
 
@@ -249,14 +234,3 @@ function status()
 	HTTP.prepare_content("application/json")
 	HTTP.write_json(data)
 end
-
--- check if installed ddns-scripts version < required version
-function update_needed()
-	local sver = DDNS.ipkg_version("ddns-scripts")
-	local rver = UTIL.split(ddns_scripts_min, "[%.%-]", nil, true)
-	return (sver.major < (tonumber(rver[1]) or 0))
-	    or (sver.minor < (tonumber(rver[2]) or 0))
-	    or (sver.patch < (tonumber(rver[3]) or 0))
-	    or (sver.build < (tonumber(rver[4]) or 0))
-end
-

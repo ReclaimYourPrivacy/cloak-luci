@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2008-2014 The LuCI Team <luci@lists.subsignal.org>
+# Copyright (C) 2008-2015 The LuCI Team <luci@lists.subsignal.org>
 #
 # This is free software, licensed under the Apache License, Version 2.0 .
 #
@@ -9,6 +9,7 @@ LUCI_TYPE?=$(word 2,$(subst -, ,$(LUCI_NAME)))
 LUCI_BASENAME?=$(patsubst luci-$(LUCI_TYPE)-%,%,$(LUCI_NAME))
 LUCI_LANGUAGES:=$(filter-out templates,$(notdir $(wildcard ${CURDIR}/po/*)))
 LUCI_DEFAULTS:=$(notdir $(wildcard ${CURDIR}/root/etc/uci-defaults/*))
+LUCI_PKGARCH?=$(if $(realpath src/Makefile),,all)
 
 # Language code titles
 LUCI_LANG.ca=Català (Catalan)
@@ -80,6 +81,7 @@ define Package/$(PKG_NAME)
   SUBMENU:=$(if $(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.$(LUCI_TYPE)),$(LUCI_MENU.app))
   TITLE:=$(if $(LUCI_TITLE),$(LUCI_TITLE),LuCI $(LUCI_NAME) $(LUCI_TYPE))
   DEPENDS:=$(LUCI_DEPENDS)
+  $(if $(LUCI_PKGARCH),PKGARCH:=$(LUCI_PKGARCH))
 endef
 
 ifneq ($(LUCI_DESCRIPTION),)
@@ -145,6 +147,7 @@ define Package/$(PKG_NAME)/install
 	if [ -d $(PKG_BUILD_DIR)/luasrc ]; then \
 	  $(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR); \
 	  cp -pR $(PKG_BUILD_DIR)/luasrc/* $(1)$(LUCI_LIBRARYDIR)/; \
+	  $(FIND) $(1)$(LUCI_LIBRARYDIR)/ -type f -name '*.luadoc' | $(XARGS) rm; \
 	  $(if $(CONFIG_LUCI_SRCDIET),$(call SrcDiet,$(1)$(LUCI_LIBRARYDIR)/),true); \
 	else true; fi
 	if [ -d $(PKG_BUILD_DIR)/htdocs ]; then \
@@ -181,6 +184,7 @@ define LuciTranslation
     HIDDEN:=1
     DEFAULT:=LUCI_LANG_$(1)||ALL
     DEPENDS:=$(PKG_NAME)
+    PKGARCH:=all
   endef
 
   define Package/luci-i18n-$(LUCI_BASENAME)-$(1)/description

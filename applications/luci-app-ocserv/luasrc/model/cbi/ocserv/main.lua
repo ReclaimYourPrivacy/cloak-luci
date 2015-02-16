@@ -1,15 +1,5 @@
---[[
-LuCI - Lua Configuration Interface
-
-Copyright 2014 Nikos Mavrogiannopoulos <n.mavrogiannopoulos@gmail.com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-]]--
+-- Copyright 2014 Nikos Mavrogiannopoulos <n.mavrogiannopoulos@gmail.com>
+-- Licensed to the public under the Apache License 2.0.
 
 local fs = require "nixio.fs"
 local has_ipv6 = fs.access("/proc/net/ipv6_route")
@@ -52,7 +42,7 @@ if fd then local ln
 			found_pki = true
 		elseif found_pki then
 			local hash = ln:match("([a-f0-9]+)")
-			o_pki.default = hash and hash:upper()
+			o_pki.default = hash and "sha1:" .. hash:upper()
 			complete = complete + 1
 			found_pki = false
 		end
@@ -99,6 +89,10 @@ s:taboption("general", Value, "dpd", translate("Dead peer detection time (secs)"
 local pip = s:taboption("general", Flag, "predictable_ips", translate("Predictable IPs"),
 	translate("The assigned IPs will be selected deterministically"))
 pip.default = "1"
+
+local compr = s:taboption("general", Flag, "compression", translate("Enable compression"),
+	translate("Enable compression"))
+compr.default = "1"
 
 local udp = s:taboption("general", Flag, "udp", translate("Enable UDP"),
 	translate("Enable UDP channel support; this must be enabled unless you know what you are doing"))

@@ -1,33 +1,8 @@
---[[
-LuCI - Dispatcher
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
-Description:
-The request dispatcher and module dispatcher generators
-
-FileId:
-$Id$
-
-License:
-Copyright 2008 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-]]--
-
---- LuCI web dispatcher.
 local fs = require "nixio.fs"
 local sys = require "luci.sys"
-local init = require "luci.init"
 local util = require "luci.util"
 local http = require "luci.http"
 local nixio = require "nixio", require "nixio.util"
@@ -47,9 +22,6 @@ local index = nil
 local fi
 
 
---- Build the URL relative to the server webroot from given virtual path.
--- @param ...	Virtual path
--- @return 		Relative URL
 function build_url(...)
 	local path = {...}
 	local url = { http.getenv("SCRIPT_NAME") or "" }
@@ -73,9 +45,6 @@ function build_url(...)
 	return table.concat(url, "")
 end
 
---- Check whether a dispatch node shall be visible
--- @param node	Dispatch node
--- @return		Boolean indicating whether the node should be visible
 function node_visible(node)
    if node then
 	  return not (
@@ -88,9 +57,6 @@ function node_visible(node)
    return false
 end
 
---- Return a sorted table of visible childs within a given node
--- @param node	Dispatch node
--- @return		Ordered table of child node names
 function node_childs(node)
 	local rv = { }
 	if node then
@@ -110,60 +76,67 @@ function node_childs(node)
 end
 
 
---- Send a 404 error code and render the "error404" template if available.
--- @param message	Custom error message (optional)
--- @return			false
 function error404(message)
-	luci.http.status(404, "Not Found")
+	http.status(404, "Not Found")
 	message = message or "Not Found"
 
 	require("luci.template")
-	if not luci.util.copcall(luci.template.render, "error404") then
-		luci.http.prepare_content("text/plain")
-		luci.http.write(message)
+	if not util.copcall(luci.template.render, "error404") then
+		http.prepare_content("text/plain")
+		http.write(message)
 	end
 	return false
 end
 
---- Send a 500 error code and render the "error500" template if available.
--- @param message	Custom error message (optional)#
--- @return			false
 function error500(message)
-	luci.util.perror(message)
+	util.perror(message)
 	if not context.template_header_sent then
-		luci.http.status(500, "Internal Server Error")
-		luci.http.prepare_content("text/plain")
-		luci.http.write(message)
+		http.status(500, "Internal Server Error")
+		http.prepare_content("text/plain")
+		http.write(message)
 	else
 		require("luci.template")
-		if not luci.util.copcall(luci.template.render, "error500", {message=message}) then
-			luci.http.prepare_content("text/plain")
-			luci.http.write(message)
+		if not util.copcall(luci.template.render, "error500", {message=message}) then
+			http.prepare_content("text/plain")
+			http.write(message)
 		end
 	end
 	return false
 end
 
 function authenticator.htmlauth(validator, accs, default)
-	local user = luci.http.formvalue("luci_username")
-	local pass = luci.http.formvalue("luci_password")
+	local user = http.formvalue("luci_username")
+	local pass = http.formvalue("luci_password")
 
 	if user and validator(user, pass) then
 		return user
 	end
 
-	require("luci.i18n")
-	require("luci.template")
-	context.path = {}
-	luci.template.render("sysauth", {duser=default, fuser=user})
+	if context.urltoken.stok then
+		context.urltoken.stok = nil
+
+		local cookie = 'sysauth=%s; expires=%s; path=%s/' %{
+		    http.getcookie('sysauth') or 'x',
+			'Thu, 01 Jan 1970 01:00:00 GMT',
+			build_url()
+		}
+
+		http.header("Set-Cookie", cookie)
+		http.redirect(build_url())
+	else
+		require("luci.i18n")
+		require("luci.template")
+		context.path = {}
+		http.status(403, "Forbidden")
+		luci.template.render("sysauth", {duser=default, fuser=user})
+	end
+
 	return false
 
 end
 
---- Dispatch an HTTP request.
--- @param request	LuCI HTTP Request object
 function httpdispatch(request, prefix)
-	luci.http.context.request = request
+	http.context.request = request
 
 	local r = {}
 	context.request = r
@@ -195,13 +168,11 @@ function httpdispatch(request, prefix)
 		dispatch(context.request)
 	end, error500)
 
-	luci.http.close()
+	http.close()
 
 	--context._disable_memtrace()
 end
 
---- Dispatches a LuCI virtual path.
--- @param request	Virtual path
 function dispatch(request)
 	--context._disable_memtrace = require "luci.debug".trap_memtrace("l")
 	local ctx = context
@@ -290,7 +261,7 @@ function dispatch(request)
 				local scope = (type(env.self) == "table") and env.self
 				return string.format(
 					' %s="%s"', tostring(key),
-					luci.util.pcdata(tostring( val
+					util.pcdata(tostring( val
 					 or (type(env[key]) ~= "function" and env[key])
 					 or (scope and type(scope[key]) ~= "function" and scope[key])
 					 or "" ))
@@ -301,7 +272,7 @@ function dispatch(request)
 		end
 
 		tpl.context.viewns = setmetatable({
-		   write       = luci.http.write;
+		   write       = http.write;
 		   include     = function(name) tpl.Template(name):render(getfenv(2)) end;
 		   translate   = i18n.translate;
 		   translatef  = i18n.translatef;
@@ -333,8 +304,6 @@ function dispatch(request)
 	)
 
 	if track.sysauth then
-		local sauth = require "luci.sauth"
-
 		local authen = type(track.sysauth_authenticator) == "function"
 		 and track.sysauth_authenticator
 		 or authenticator[track.sysauth_authenticator]
@@ -344,12 +313,12 @@ function dispatch(request)
 		local sess = ctx.authsession
 		local verifytoken = false
 		if not sess then
-			sess = luci.http.getcookie("sysauth")
+			sess = http.getcookie("sysauth")
 			sess = sess and sess:match("^[a-f0-9]*$")
 			verifytoken = true
 		end
 
-		local sdat = sauth.read(sess)
+		local sdat = (util.ubus("session", "get", { ubus_rpc_session = sess }) or { }).values
 		local user
 
 		if sdat then
@@ -359,35 +328,48 @@ function dispatch(request)
 		else
 			local eu = http.getenv("HTTP_AUTH_USER")
 			local ep = http.getenv("HTTP_AUTH_PASS")
-			if eu and ep and luci.sys.user.checkpasswd(eu, ep) then
+			if eu and ep and sys.user.checkpasswd(eu, ep) then
 				authen = function() return eu end
 			end
 		end
 
 		if not util.contains(accs, user) then
 			if authen then
-				ctx.urltoken.stok = nil
-				local user, sess = authen(luci.sys.user.checkpasswd, accs, def)
+				local user, sess = authen(sys.user.checkpasswd, accs, def)
+				local token
 				if not user or not util.contains(accs, user) then
 					return
 				else
-					local sid = sess or luci.sys.uniqueid(16)
 					if not sess then
-						local token = luci.sys.uniqueid(16)
-						sauth.reap()
-						sauth.write(sid, {
-							user=user,
-							token=token,
-							secret=luci.sys.uniqueid(16)
-						})
-						ctx.urltoken.stok = token
+						local sdat = util.ubus("session", "create", { timeout = tonumber(luci.config.sauth.sessiontime) })
+						if sdat then
+							token = sys.uniqueid(16)
+							util.ubus("session", "set", {
+								ubus_rpc_session = sdat.ubus_rpc_session,
+								values = {
+									user = user,
+									token = token,
+									section = sys.uniqueid(16)
+								}
+							})
+							sess = sdat.ubus_rpc_session
+						end
 					end
-					luci.http.header("Set-Cookie", "sysauth=" .. sid.."; path="..build_url())
-					ctx.authsession = sid
-					ctx.authuser = user
+
+					if sess and token then
+						http.header("Set-Cookie", 'sysauth=%s; path=%s/' %{
+						   sess, build_url()
+						})
+
+						ctx.urltoken.stok = token
+						ctx.authsession = sess
+						ctx.authuser = user
+
+						http.redirect(build_url(unpack(ctx.requestpath)))
+					end
 				end
 			else
-				luci.http.status(403, "Forbidden")
+				http.status(403, "Forbidden")
 				return
 			end
 		else
@@ -397,11 +379,14 @@ function dispatch(request)
 	end
 
 	if track.setgroup then
-		luci.sys.process.setgroup(track.setgroup)
+		sys.process.setgroup(track.setgroup)
 	end
 
 	if track.setuser then
-		luci.sys.process.setuser(track.setuser)
+		-- trigger ubus connection before dropping root privs
+		util.ubus()
+
+		sys.process.setuser(track.setuser)
 	end
 
 	local target = nil
@@ -463,46 +448,17 @@ function dispatch(request)
 	end
 end
 
---- Generate the dispatching index using the best possible strategy.
 function createindex()
-	local path = luci.util.libpath() .. "/controller/"
-	local suff = { ".lua", ".lua.gz" }
-
-	if luci.util.copcall(require, "luci.fastindex") then
-		createindex_fastindex(path, suff)
-	else
-		createindex_plain(path, suff)
-	end
-end
-
---- Generate the dispatching index using the fastindex C-indexer.
--- @param path		Controller base directory
--- @param suffixes	Controller file suffixes
-function createindex_fastindex(path, suffixes)
-	index = {}
-
-	if not fi then
-		fi = luci.fastindex.new("index")
-		for _, suffix in ipairs(suffixes) do
-			fi.add(path .. "*" .. suffix)
-			fi.add(path .. "*/*" .. suffix)
-		end
-	end
-	fi.scan()
-
-	for k, v in pairs(fi.indexes) do
-		index[v[2]] = v[1]
-	end
-end
-
---- Generate the dispatching index using the native file-cache based strategy.
--- @param path		Controller base directory
--- @param suffixes	Controller file suffixes
-function createindex_plain(path, suffixes)
 	local controllers = { }
-	for _, suffix in ipairs(suffixes) do
-		nixio.util.consume((fs.glob(path .. "*" .. suffix)), controllers)
-		nixio.util.consume((fs.glob(path .. "*/*" .. suffix)), controllers)
+	local base = "%s/controller/" % util.libpath()
+	local _, path
+
+	for path in (fs.glob("%s*.lua" % base) or function() end) do
+		controllers[#controllers+1] = path
+	end
+
+	for path in (fs.glob("%s*/*.lua" % base) or function() end) do
+		controllers[#controllers+1] = path
 	end
 
 	if indexcache then
@@ -514,7 +470,7 @@ function createindex_plain(path, suffixes)
 				realdate = (omtime and omtime > realdate) and omtime or realdate
 			end
 
-			if cachedate > realdate then
+			if cachedate > realdate and sys.process.info("uid") == 0 then
 				assert(
 					sys.process.info("uid") == fs.stat(indexcache, "uid")
 					and fs.stat(indexcache, "modestr") == "rw-------",
@@ -529,23 +485,19 @@ function createindex_plain(path, suffixes)
 
 	index = {}
 
-	for i,c in ipairs(controllers) do
-		local modname = "luci.controller." .. c:sub(#path+1, #c):gsub("/", ".")
-		for _, suffix in ipairs(suffixes) do
-			modname = modname:gsub(suffix.."$", "")
-		end
-
+	for _, path in ipairs(controllers) do
+		local modname = "luci.controller." .. path:sub(#base+1, #path-4):gsub("/", ".")
 		local mod = require(modname)
 		assert(mod ~= true,
 		       "Invalid controller file found\n" ..
-		       "The file '" .. c .. "' contains an invalid module line.\n" ..
+		       "The file '" .. path .. "' contains an invalid module line.\n" ..
 		       "Please verify whether the module name is set to '" .. modname ..
 		       "' - It must correspond to the file path!")
 
 		local idx = mod.index
 		assert(type(idx) == "function",
 		       "Invalid controller file found\n" ..
-		       "The file '" .. c .. "' contains no index() function.\n" ..
+		       "The file '" .. path .. "' contains no index() function.\n" ..
 		       "Please make sure that the controller contains a valid " ..
 		       "index function and verify the spelling!")
 
@@ -559,7 +511,6 @@ function createindex_plain(path, suffixes)
 	end
 end
 
---- Create the dispatching tree from the index.
 -- Build the index before if it does not exist yet.
 function createtree()
 	if not index then
@@ -598,9 +549,6 @@ function createtree()
 	return tree
 end
 
---- Register a tree modifier.
--- @param	func	Modifier function
--- @param	order	Modifier order value (optional)
 function modifier(func, order)
 	context.modifiers[#context.modifiers+1] = {
 		func = func,
@@ -610,12 +558,6 @@ function modifier(func, order)
 	}
 end
 
---- Clone a node of the dispatching tree to another position.
--- @param	path	Virtual path destination
--- @param	clone	Virtual path source
--- @param	title	Destination node title (optional)
--- @param	order	Destination node order value (optional)
--- @return			Dispatching tree node
 function assign(path, clone, title, order)
 	local obj  = node(unpack(path))
 	obj.nodes  = nil
@@ -629,12 +571,6 @@ function assign(path, clone, title, order)
 	return obj
 end
 
---- Create a new dispatching node and define common parameters.
--- @param	path	Virtual path
--- @param	target	Target function to call when dispatched.
--- @param	title	Destination node title
--- @param	order	Destination node order value (optional)
--- @return			Dispatching tree node
 function entry(path, target, title, order)
 	local c = node(unpack(path))
 
@@ -646,17 +582,11 @@ function entry(path, target, title, order)
 	return c
 end
 
---- Fetch or create a dispatching node without setting the target module or
 -- enabling the node.
--- @param	...		Virtual path
--- @return			Dispatching tree node
 function get(...)
 	return _create_node({...})
 end
 
---- Fetch or create a new dispatching node.
--- @param	...		Virtual path
--- @return			Dispatching tree node
 function node(...)
 	local c = _create_node({...})
 
@@ -716,13 +646,10 @@ function _firstchild()
    dispatch(path)
 end
 
---- Alias the first (lowest order) page automatically
 function firstchild()
    return { type = "firstchild", target = _firstchild }
 end
 
---- Create a redirect to another dispatching node.
--- @param	...		Virtual path destination
 function alias(...)
 	local req = {...}
 	return function(...)
@@ -734,9 +661,6 @@ function alias(...)
 	end
 end
 
---- Rewrite the first x path values of the request.
--- @param	n		Number of path values to replace
--- @param	...		Virtual path to replace removed path values with
 function rewrite(n, ...)
 	local req = {...}
 	return function(...)
@@ -775,9 +699,6 @@ local function _call(self, ...)
 	end
 end
 
---- Create a function-call dispatching target.
--- @param	name	Target function of local controller
--- @param	...		Additional parameters passed to the function
 function call(name, ...)
 	return {type = "call", argv = {...}, name = name, target = _call}
 end
@@ -787,8 +708,6 @@ local _template = function(self, ...)
 	require "luci.template".render(self.view)
 end
 
---- Create a template render dispatching target.
--- @param	name	Template to be rendered
 function template(name)
 	return {type = "template", view = name, target = _template}
 end
@@ -894,8 +813,6 @@ local function _cbi(self, ...)
 	end
 end
 
---- Create a CBI model dispatching target.
--- @param	model	CBI model to be rendered
 function cbi(model, config)
 	return {type = "cbi", config = config, model = model, target = _cbi}
 end
@@ -908,9 +825,6 @@ local function _arcombine(self, ...)
 	target:target(unpack(argv))
 end
 
---- Create a combined dispatching target for non argv and argv requests.
--- @param trg1	Overview Target
--- @param trg2	Detail Target
 function arcombine(trg1, trg2)
 	return {type = "arcombine", env = getfenv(), target = _arcombine, targets = {trg1, trg2}}
 end
@@ -939,19 +853,12 @@ local function _form(self, ...)
 	tpl.render("footer")
 end
 
---- Create a CBI form model dispatching target.
--- @param	model	CBI form model tpo be rendered
 function form(model)
 	return {type = "cbi", model = model, target = _form}
 end
 
---- Access the luci.i18n translate() api.
--- @class  function
--- @name   translate
--- @param  text    Text to translate
 translate = i18n.translate
 
---- No-op function used to mark translation entries for menu labels.
 -- This function does not actually translate the given argument but
 -- is used by build/i18n-scan.pl to find translatable entries.
 function _(text)

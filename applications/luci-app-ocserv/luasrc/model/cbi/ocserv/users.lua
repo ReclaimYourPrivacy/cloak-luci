@@ -1,15 +1,5 @@
---[[
-LuCI - Lua Configuration Interface
-
-Copyright 2014 Nikos Mavrogiannopoulos <n.mavrogiannopoulos@gmail.com>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-]]--
+-- Copyright 2014 Nikos Mavrogiannopoulos <n.mavrogiannopoulos@gmail.com>
+-- Licensed to the public under the Apache License 2.0.
 
 local dsp = require "luci.dispatcher"
 local nixio  = require "nixio"
@@ -57,7 +47,7 @@ if fd then local ln
 		if not ln then break end
 
 		local id, user, group, vpn_ip, ip, device, time, cipher, status = 
-			ln:match("^%s*(%d+)%s+([-_%w]+)%s+([%.%*-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+).*")
+			ln:match("^%s*(%d+)%s+([-_%w]+)%s+([%.%*-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%:%.-_%w]+)%s+([%(%)%:%.-_%w]+)%s+([%:%.-_%w]+).*")
 		if id then
 			table.insert(lusers, {id, user, group, vpn_ip, ip, device, time, cipher, status})
 		end

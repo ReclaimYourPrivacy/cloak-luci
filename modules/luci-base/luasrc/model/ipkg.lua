@@ -1,16 +1,6 @@
---[[
-LuCI - Lua Configuration Interface
-
-(c) 2008-2011 Jo-Philipp Wich <xm@subsignal.org>
-(c) 2008 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-]]--
+-- Copyright 2008-2011 Jo-Philipp Wich <jow@openwrt.org>
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
 local os   = require "os"
 local io   = require "io"
@@ -25,7 +15,6 @@ local table = table
 local ipkg = "opkg --force-removal-of-dependent-packages --force-overwrite --nocase"
 local icfg = "/etc/opkg.conf"
 
---- LuCI OPKG call abstraction library
 module "luci.model.ipkg"
 
 
@@ -103,54 +92,31 @@ local function _lookup(act, pkg)
 end
 
 
---- Return information about installed and available packages.
--- @param pkg Limit output to a (set of) packages
--- @return Table containing package information
 function info(pkg)
 	return _lookup("info", pkg)
 end
 
---- Return the package status of one or more packages.
--- @param pkg Limit output to a (set of) packages
--- @return Table containing package status information
 function status(pkg)
 	return _lookup("status", pkg)
 end
 
---- Install one or more packages.
--- @param ... List of packages to install
--- @return Boolean indicating the status of the action
--- @return OPKG return code, STDOUT and STDERR
 function install(...)
 	return _action("install", ...)
 end
 
---- Determine whether a given package is installed.
--- @param pkg Package
--- @return Boolean
 function installed(pkg)
 	local p = status(pkg)[pkg]
 	return (p and p.Status and p.Status.installed)
 end
 
---- Remove one or more packages.
--- @param ... List of packages to install
--- @return Boolean indicating the status of the action
--- @return OPKG return code, STDOUT and STDERR
 function remove(...)
 	return _action("remove", ...)
 end
 
---- Update package lists.
--- @return Boolean indicating the status of the action
--- @return OPKG return code, STDOUT and STDERR
 function update()
 	return _action("update")
 end
 
---- Upgrades all installed packages.
--- @return Boolean indicating the status of the action
--- @return OPKG return code, STDOUT and STDERR
 function upgrade()
 	return _action("upgrade")
 end
@@ -184,33 +150,19 @@ function _list(action, pat, cb)
 	end
 end
 
---- List all packages known to opkg.
--- @param pat	Only find packages matching this pattern, nil lists all packages
--- @param cb	Callback function invoked for each package, receives name, version and description as arguments
--- @return	nothing
 function list_all(pat, cb)
 	_list("list", pat, cb)
 end
 
---- List installed packages.
--- @param pat	Only find packages matching this pattern, nil lists all packages
--- @param cb	Callback function invoked for each package, receives name, version and description as arguments
--- @return	nothing
 function list_installed(pat, cb)
 	_list("list_installed", pat, cb)
 end
 
---- Find packages that match the given pattern.
--- @param pat	Find packages whose names or descriptions match this pattern, nil results in zero results
--- @param cb	Callback function invoked for each patckage, receives name, version and description as arguments
--- @return	nothing
 function find(pat, cb)
 	_list("find", pat, cb)
 end
 
 
---- Determines the overlay root used by opkg.
--- @return		String containing the directory path of the overlay root.
 function overlay_root()
 	local od = "/"
 	local fd = io.open(icfg, "r")

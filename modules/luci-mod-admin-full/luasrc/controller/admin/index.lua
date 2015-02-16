@@ -1,16 +1,5 @@
---[[
-LuCI - Lua Configuration Interface
-
-Copyright 2008 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
+-- Copyright 2008 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
 module("luci.controller.admin.index", package.seeall)
 
@@ -38,12 +27,18 @@ end
 
 function action_logout()
 	local dsp = require "luci.dispatcher"
-	local sauth = require "luci.sauth"
-	if dsp.context.authsession then
-		sauth.kill(dsp.context.authsession)
+	local utl = require "luci.util"
+	local sid = dsp.context.authsession
+
+	if sid then
+		utl.ubus("session", "destroy", { ubus_rpc_session = sid })
+
 		dsp.context.urltoken.stok = nil
+
+		luci.http.header("Set-Cookie", "sysauth=%s; expires=%s; path=%s/" %{
+			sid, 'Thu, 01 Jan 1970 01:00:00 GMT', dsp.build_url()
+		})
 	end
 
-	luci.http.header("Set-Cookie", "sysauth=; path=" .. dsp.build_url())
 	luci.http.redirect(luci.dispatcher.build_url())
 end

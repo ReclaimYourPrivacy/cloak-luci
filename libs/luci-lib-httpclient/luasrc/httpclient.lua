@@ -1,16 +1,5 @@
---[[
-LuCI - Lua Development Framework
-
-Copyright 2009 Steven Barth <steven@midlink.org>
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-$Id$
-]]--
+-- Copyright 2009 Steven Barth <steven@midlink.org>
+-- Licensed to the public under the Apache License 2.0.
 
 require "nixio.util"
 local nixio = require "nixio"
@@ -108,7 +97,11 @@ end
 function request_raw(uri, options)
 	options = options or {}
 	local pr, auth, host, port, path
-	
+
+	if options.params then
+		uri = uri .. '?' .. http.urlencode_params(options.params)
+	end
+
 	if uri:find("%[") then
 		if uri:find("@") then
 			pr, auth, host, port, path = uri:match("(%w+)://(.+)@(%b[]):?([0-9]*)(.*)")
@@ -187,6 +180,25 @@ function request_raw(uri, options)
 		options.method = options.method or "POST"
 	end
 
+	if options.cookies then
+		local cookiedata = {}
+		for _, c in ipairs(options.cookies) do
+			local cdo = c.flags.domain
+			local cpa = c.flags.path
+			if   (cdo == host or cdo == "."..host or host:sub(-#cdo) == cdo) 
+			 and (cpa == path or cpa == "/" or cpa .. "/" == path:sub(#cpa+1))
+			 and (not c.flags.secure or pr == "https")
+			then
+				cookiedata[#cookiedata+1] = c.key .. "=" .. c.value
+			end 
+		end
+		if headers["Cookie"] then
+			headers["Cookie"] = headers["Cookie"] .. "; " .. table.concat(cookiedata, "; ")
+		else
+			headers["Cookie"] = table.concat(cookiedata, "; ")
+		end
+	end
+
 	-- Assemble message
 	local message = {(options.method or "GET") .. " " .. path .. " " .. protocol}
 	
@@ -199,20 +211,7 @@ function request_raw(uri, options)
 			end
 		end
 	end
-	
-	if options.cookies then
-		for _, c in ipairs(options.cookies) do
-			local cdo = c.flags.domain
-			local cpa = c.flags.path
-			if   (cdo == host or cdo == "."..host or host:sub(-#cdo) == cdo) 
-			 and (cpa == path or cpa == "/" or cpa .. "/" == path:sub(#cpa+1))
-			 and (not c.flags.secure or pr == "https")
-			then
-				message[#message+1] = "Cookie: " .. c.key .. "=" .. c.value
-			end 
-		end
-	end
-	
+
 	message[#message+1] = ""
 	message[#message+1] = ""
 	
@@ -334,7 +333,7 @@ function request_raw(uri, options)
 		end
 	end
 	
-	return response.code, response, linesrc(true), sock
+	return response.code, response, linesrc(true)..sock:readall(), sock
 end
 
 function cookie_parse(cookiestr)
