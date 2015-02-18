@@ -14,7 +14,8 @@ Copyright 2014 Lars Boegild Thomsen <lth@bright-things.com>
 	local tree = disp.node()
 	local categories = disp.node_childs(tree)
 %>
-   <footer><a href="http://reclaim-your-privacy.com">Powered by Cloak</a> <%= ver.distversion %>
+   <footer>
+	Powered by <a href="http://reclaim-your-privacy.com">Cloak</a> <%= ver.distversion %>
 
     <% if #categories > 1 then %>
      <ul class="breadcrumb pull-right" id="modemenu">
